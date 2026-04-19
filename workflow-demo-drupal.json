@@ -1,0 +1,101 @@
+{
+  "name": "DEMO — Drupal → n8n",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "sa-sync",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "demo-0001-0001-0001-demo00010001",
+      "name": "Webhook Drupal",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [240, 300],
+      "webhookId": "sa-sync-drupal-webhook"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": { "caseSensitive": true, "typeValidation": "strict" },
+          "conditions": [
+            {
+              "id": "secret-check",
+              "leftValue": "={{ $json.headers['x-sa-secret'] }}",
+              "rightValue": "siempreaktiva2024",
+              "operator": { "type": "string", "operation": "equals" }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "demo-0002-0002-0002-demo00020002",
+      "name": "Validar Secret",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [460, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "const d = $input.first().json;\n\nconst precio = new Intl.NumberFormat('es-CO', {\n  style: 'currency', currency: 'COP', maximumFractionDigits: 0\n}).format(d.precio);\n\nreturn [{\n  json: {\n    ok: true,\n    evento: d.evento,\n    nid: d.nid,\n    uuid: d.uuid,\n    titulo: d.titulo,\n    precio_formateado: precio,\n    imagen_url: d.imagen_url,\n    categoria: d.categoria,\n    es_oferta: d.es_oferta,\n    timestamp_recibido: new Date().toISOString()\n  }\n}];"
+      },
+      "id": "demo-0003-0003-0003-demo00030003",
+      "name": "Procesar Payload",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [680, 180]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify($json, null, 2) }}",
+        "options": { "responseCode": 200 }
+      },
+      "id": "demo-0004-0004-0004-demo00040004",
+      "name": "Responder OK",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [900, 180]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "{ \"error\": \"Unauthorized\", \"hint\": \"Revisa webhook_secret en siempreaktiva_sync.settings\" }",
+        "options": { "responseCode": 401 }
+      },
+      "id": "demo-0005-0005-0005-demo00050005",
+      "name": "Rechazar 401",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [680, 420]
+    }
+  ],
+  "connections": {
+    "Webhook Drupal": {
+      "main": [
+        [{ "node": "Validar Secret", "type": "main", "index": 0 }]
+      ]
+    },
+    "Validar Secret": {
+      "main": [
+        [{ "node": "Procesar Payload", "type": "main", "index": 0 }],
+        [{ "node": "Rechazar 401", "type": "main", "index": 0 }]
+      ]
+    },
+    "Procesar Payload": {
+      "main": [
+        [{ "node": "Responder OK", "type": "main", "index": 0 }]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "saveManualExecutions": true
+  },
+  "meta": {
+    "templateCredsSetupCompleted": true
+  }
+}

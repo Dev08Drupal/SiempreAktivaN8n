@@ -1,0 +1,318 @@
+{
+  "name": "SiempreAktiva — Sync Drupal → FB + IG",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "sa-sync",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "sa-0001-0001-0001-sa00010001",
+      "name": "Webhook Drupal",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [240, 300],
+      "webhookId": "sa-sync-drupal-webhook"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "secret-check",
+              "leftValue": "={{ $json.headers['x-sa-secret'] }}",
+              "rightValue": "siempreaktiva2024",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "sa-0002-0002-0002-sa00020002",
+      "name": "Validar Secret",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [460, 300]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={ \"error\": \"Unauthorized\" }",
+        "responseCode": 401,
+        "options": {}
+      },
+      "id": "sa-0003-0003-0003-sa00030003",
+      "name": "Rechazar — 401",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [680, 480]
+    },
+    {
+      "parameters": {
+        "jsCode": "const d = $input.first().json;\n\n// Formatear precio COP\nconst precio = new Intl.NumberFormat('es-CO', {\n  style: 'currency',\n  currency: 'COP',\n  maximumFractionDigits: 0\n}).format(d.precio);\n\n// Caption Instagram (max 2200 chars)\nlet caption_ig = `✨ *${d.titulo}*\\n\\n`;\ncaption_ig += d.es_oferta\n  ? `🔥 OFERTA: ${precio} (${d.descuento}% OFF)\\n\\n`\n  : `💰 Precio: ${precio}\\n\\n`;\ncaption_ig += `${d.descripcion || ''}\\n\\n`;\ncaption_ig += `📲 Escríbenos para pedirlo\\n`;\ncaption_ig += `#${d.categoria} #siempreaktiva #tienda #moda`;\n\n// Texto Facebook\nlet texto_fb = `🛍️ ${d.titulo}\\n\\n`;\ntexto_fb += d.es_oferta\n  ? `🔥 OFERTA ESPECIAL: ${precio} (${d.descuento}% de descuento)\\n\\n`\n  : `Precio: ${precio}\\n\\n`;\ntexto_fb += `${d.descripcion || ''}\\n\\n`;\ntexto_fb += `💬 Escríbenos por WhatsApp o en los comentarios`;\n\nreturn [{\n  json: {\n    ...d,\n    precio_formateado: precio,\n    caption_ig,\n    texto_fb\n  }\n}];"
+      },
+      "id": "sa-0004-0004-0004-sa00040004",
+      "name": "Transformar Datos",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [680, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "evento-nuevo",
+              "leftValue": "={{ $json.evento }}",
+              "rightValue": "producto_nuevo",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "sa-0005-0005-0005-sa00050005",
+      "name": "Es Producto Nuevo?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [900, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://graph.facebook.com/v19.0/{{ $env.FB_PAGE_ID }}/photos",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            { "name": "url", "value": "={{ $json.imagen_url }}" },
+            { "name": "message", "value": "={{ $json.texto_fb }}" },
+            { "name": "access_token", "value": "={{ $env.FB_PAGE_TOKEN }}" }
+          ]
+        },
+        "options": {}
+      },
+      "id": "sa-0006-0006-0006-sa00060006",
+      "name": "FB — Publicar Foto",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1120, 180]
+    },
+    {
+      "parameters": {
+        "amount": 30,
+        "unit": "seconds"
+      },
+      "id": "sa-0007-0007-0007-sa00070007",
+      "name": "Esperar 30s",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1,
+      "position": [1340, 180]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://graph.facebook.com/v19.0/{{ $env.IG_USER_ID }}/media",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            { "name": "image_url", "value": "={{ $('Transformar Datos').item.json.imagen_url }}" },
+            { "name": "caption", "value": "={{ $('Transformar Datos').item.json.caption_ig }}" },
+            { "name": "access_token", "value": "={{ $env.IG_TOKEN }}" }
+          ]
+        },
+        "options": {}
+      },
+      "id": "sa-0008-0008-0008-sa00080008",
+      "name": "IG — Crear Container",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1560, 180]
+    },
+    {
+      "parameters": {
+        "amount": 5,
+        "unit": "seconds"
+      },
+      "id": "sa-0009-0009-0009-sa00090009",
+      "name": "Esperar 5s",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1,
+      "position": [1780, 180]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://graph.facebook.com/v19.0/{{ $env.IG_USER_ID }}/media_publish",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            { "name": "creation_id", "value": "={{ $json.id }}" },
+            { "name": "access_token", "value": "={{ $env.IG_TOKEN }}" }
+          ]
+        },
+        "options": {}
+      },
+      "id": "sa-0010-0010-0010-sa00100010",
+      "name": "IG — Publicar",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [2000, 180]
+    },
+    {
+      "parameters": {
+        "method": "PATCH",
+        "url": "=https://siempreaktiva.ddev.site/jsonapi/node/producto/{{ $('Transformar Datos').item.json.uuid }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "Content-Type", "value": "application/vnd.api+json" },
+            { "name": "Authorization", "value": "=Basic {{ $env.DRUPAL_B64 }}" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"data\": {\n    \"type\": \"node--producto\",\n    \"id\": \"{{ $('Transformar Datos').item.json.uuid }}\",\n    \"attributes\": {\n      \"field_fb_post_id\": \"{{ $('FB — Publicar Foto').item.json.id }}\",\n      \"field_ig_media_id\": \"{{ $('IG — Publicar').item.json.id }}\",\n      \"field_pub_estado\": \"publicado\"\n    }\n  }\n}",
+        "options": {}
+      },
+      "id": "sa-0011-0011-0011-sa00110011",
+      "name": "Drupal — Guardar IDs",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [2220, 180]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={\n  \"status\": \"ok\",\n  \"evento\": \"{{ $('Transformar Datos').item.json.evento }}\",\n  \"nid\": {{ $('Transformar Datos').item.json.nid }}\n}",
+        "options": {}
+      },
+      "id": "sa-0012-0012-0012-sa00120012",
+      "name": "Responder OK",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [2440, 180]
+    },
+    {
+      "parameters": {
+        "method": "PATCH",
+        "url": "=https://siempreaktiva.ddev.site/jsonapi/node/producto/{{ $json.uuid }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "Content-Type", "value": "application/vnd.api+json" },
+            { "name": "Authorization", "value": "=Basic {{ $env.DRUPAL_B64 }}" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"data\": {\n    \"type\": \"node--producto\",\n    \"id\": \"{{ $json.uuid }}\",\n    \"attributes\": {\n      \"field_pub_estado\": \"actualizado\"\n    }\n  }\n}",
+        "options": {}
+      },
+      "id": "sa-0013-0013-0013-sa00130013",
+      "name": "Drupal — Marcar Actualizado",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1120, 420]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={\n  \"status\": \"ok\",\n  \"evento\": \"producto_actualizado\",\n  \"nid\": {{ $json.nid }}\n}",
+        "options": {}
+      },
+      "id": "sa-0014-0014-0014-sa00140014",
+      "name": "Responder Actualizado",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [1340, 420]
+    }
+  ],
+  "connections": {
+    "Webhook Drupal": {
+      "main": [
+        [{ "node": "Validar Secret", "type": "main", "index": 0 }]
+      ]
+    },
+    "Validar Secret": {
+      "main": [
+        [{ "node": "Transformar Datos", "type": "main", "index": 0 }],
+        [{ "node": "Rechazar — 401", "type": "main", "index": 0 }]
+      ]
+    },
+    "Transformar Datos": {
+      "main": [
+        [{ "node": "Es Producto Nuevo?", "type": "main", "index": 0 }]
+      ]
+    },
+    "Es Producto Nuevo?": {
+      "main": [
+        [{ "node": "FB — Publicar Foto", "type": "main", "index": 0 }],
+        [{ "node": "Drupal — Marcar Actualizado", "type": "main", "index": 0 }]
+      ]
+    },
+    "FB — Publicar Foto": {
+      "main": [
+        [{ "node": "Esperar 30s", "type": "main", "index": 0 }]
+      ]
+    },
+    "Esperar 30s": {
+      "main": [
+        [{ "node": "IG — Crear Container", "type": "main", "index": 0 }]
+      ]
+    },
+    "IG — Crear Container": {
+      "main": [
+        [{ "node": "Esperar 5s", "type": "main", "index": 0 }]
+      ]
+    },
+    "Esperar 5s": {
+      "main": [
+        [{ "node": "IG — Publicar", "type": "main", "index": 0 }]
+      ]
+    },
+    "IG — Publicar": {
+      "main": [
+        [{ "node": "Drupal — Guardar IDs", "type": "main", "index": 0 }]
+      ]
+    },
+    "Drupal — Guardar IDs": {
+      "main": [
+        [{ "node": "Responder OK", "type": "main", "index": 0 }]
+      ]
+    },
+    "Drupal — Marcar Actualizado": {
+      "main": [
+        [{ "node": "Responder Actualizado", "type": "main", "index": 0 }]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "saveManualExecutions": true,
+    "callerPolicy": "workflowsFromSameOwner",
+    "errorWorkflow": ""
+  },
+  "meta": {
+    "templateCredsSetupCompleted": true
+  }
+}
